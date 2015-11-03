@@ -1,6 +1,7 @@
 # finatra-session #
 
-Work in progress support for sessions in Finatra. Session is `Map[String, String]` , it's encrypted with `PBEWithMD5AndDES` (1000 key stretch iterations) and signed with `HmacSHA1`.
+Work in progress support for sessions in Finatra. Session is `Map[String, String]`,
+it's encrypted with `PBEWithMD5AndDES` (1000 key stretch iterations) and signed with `HmacSHA1`.
 
 ## Usage ##
 
@@ -10,7 +11,8 @@ In server definition
 	
 	object MyModule extends TwitterModule {
 			@Provides
-			def providesSessionFilter = new SessionFilter(System.getenv("APP_SECRET"), "my_cookie_name")	
+			def providesSessionFilter = {
+			    new SessionFilter(secret = System.getenv("APP_SECRET"), cookieName = "my_cookie_name")
 	}
 
     class ExampleServer extends HttpServer {
@@ -28,7 +30,7 @@ In controller
 	
 	class HomeController extends Controller {
 		get("/") { req: Request =>
-			val key = req.session.getOrElse("csrf_token", "")
+			val token = req.session.getOrElse("csrf_token", "")
 			response.ok("hello").session(Map("key" -> "value"))
 		}
 	}
