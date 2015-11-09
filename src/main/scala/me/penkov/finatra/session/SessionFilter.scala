@@ -1,12 +1,79 @@
 package me.penkov.finatra.session
 
-import com.twitter.finagle._
-import com.twitter.finagle.http._
-import com.twitter.finatra.http.response.ResponseBuilder
-import com.twitter.util.Future
 import java.io._
+import java.util.concurrent.TimeUnit
+
+import com.twitter.finagle._
+import com.twitter.finagle.http.{Request,Response, RequestProxy, ResponseProxy, Cookie}
+import com.twitter.finatra.http.response.ResponseBuilder
+import com.twitter.util.{Duration, Future}
 import me.penkov.crypto._
 import me.penkov.utils.Utils._
+
+case class ReqWithSession(request: Request, session: Map[String, String]) extends RequestProxy
+case class RepWithSession(response: Response, session: Map[String, String] = Map.empty[String, String]) extends ResponseProxy
+
+case class CookieSettings(name: String,
+                          domain: String = null,
+                          isHttpOnly: Boolean = false,
+                          isSecure: Boolean = false,
+                          maxAge: Duration = Duration.Top,
+                          path: String
+                         )
+
+class ProperSessionFilter(secret: String, settings: CookieSettings) extends Filter[Request, Response, ReqWithSession, RepWithSession] {
+  val encPool = new MessageEncryptorPool(secret)
+
+  override def apply(request: Request, service: Service[ReqWithSession, RepWithSession]): Future[Response] = {
+    val sessionReq = readSession(request)
+
+    service(sessionReq).map(writeSession)
+  }
+
+  private def readSession(req: Request) : ReqWithSession = {
+    val session = req.cookies.get(settings.name).map { cookie =>
+      val is = new ByteArrayInputStream(encPool.get.decryptAndVerify(cookie.value))
+      using(new ObjectInputStream(is)) { ois =>
+        ois.readObject.asInstanceOf[Map[String, String]]
+      }
+    } getOrElse Map.empty[String, String]
+    new ReqWithSession(req, session)
+  }
+
+  private def writeSession(resp: RepWithSession) : Response = {
+    val os = new ByteArrayOutputStream()
+    val oos = new ObjectOutputStream(os)
+    oos.writeObject(resp.session)
+    oos.close()
+    val s = encPool.get.encryptAndSign(os.toByteArray)
+    val cookie = new Cookie(settings.name, s)
+    cookie.domain = settings.domain
+    cookie.httpOnly = settings.isHttpOnly
+    cookie.isSecure = settings.isSecure
+    cookie.maxAge = settings.maxAge
+    cookie.path = settings.path
+    resp.cookies.add(cookie)
+    resp
+  }
+}
+
+object ProperExtensions {
+  implicit class ResponseExt(val resp: Response) extends AnyVal {
+    def withSession(session: Map[String,String]): RepWithSession = {
+      new RepWithSession(resp, session)
+    }
+  }
+
+  implicit class EnrichedResponseExt(val rep: ResponseBuilder#EnrichedResponse) extends AnyVal {
+    def withSession(session: Map[String,String]): RepWithSession = {
+      new RepWithSession(rep, session)
+    }
+  }
+
+  implicit def toSessionRep(rep: Response) = new RepWithSession(rep)
+
+  implicit def toSessionRep(rep: ResponseBuilder#EnrichedResponse) = new RepWithSession(rep.resp)
+}
 
 class SessionFilter(secret: String, cookieName: String) extends SimpleFilter[Request, Response] {
   val encPool = new MessageEncryptorPool(secret)
