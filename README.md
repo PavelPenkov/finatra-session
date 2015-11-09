@@ -10,9 +10,17 @@ In server definition
 	import me.penkov.finatra.session._
 	
 	object MyModule extends TwitterModule {
-			@Provides
-			def providesSessionFilter = {
-			    new SessionFilter(secret = System.getenv("APP_SECRET"), cookieName = "my_cookie_name")
+        @Provides
+        def providesSessionFilter = {
+            new SessionFilter(secret = System.getenv("APP_SECRET"), settings = CookieSettings(
+                name = "finatra_session",
+                domain = "server.com",
+                httpOnly = true,
+                isSecure = true,
+                maxAge = Duration.Top,
+                path = "/"
+                )
+            )
 	}
 
     class ExampleServer extends HttpServer {
