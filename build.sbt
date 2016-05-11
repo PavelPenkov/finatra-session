@@ -7,8 +7,12 @@ version := "0.0.1-SNAPSHOT"
 scalaVersion := "2.11.7"
 
 lazy val versions = new {
-  val finatra = "2.1.1"
+  val finatra = "2.1.6"
 }
+
+scalacOptions += "-target:jvm-1.8"
+
+resolvers += "Twitter" at "http://maven.twttr.com"
 
 libraryDependencies ++= Seq(
   "com.twitter.finatra" %% "finatra-http" % versions.finatra,
